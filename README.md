@@ -1,6 +1,6 @@
 # BAMF (Backdoor Access Machine Farmer)
-[![license](https://img.shields.io/badge/license-GNU-brightgreen.svg)]
-[![version](https://img.shields.io/badge/version-0.1.2-lightgrey.svg)]
+[![license](https://img.shields.io/badge/license-GNU-brightgreen.svg)](https://github.com/malwaredllc/bamf/LICENSE)
+[![version](https://img.shields.io/badge/version-0.1.2-lightgrey.svg)](https://github.com/malwaredllc/bamf)
 
 __DISCLAIMER__: This project should be used for authorized testing and educational purposes only.
 
