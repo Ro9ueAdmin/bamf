@@ -1,0 +1,2 @@
+mechanize==0.3.6
+shodan==1.9.0
