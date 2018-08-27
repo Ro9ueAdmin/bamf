@@ -54,6 +54,8 @@ ____________________________________________________________
 
 ## Contact
 
+__Website__: https://malwared.com
+
 __Email__: security@malwared.com
 
 __Twitter__: [![twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/malwaredllc)
