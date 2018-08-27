@@ -1,4 +1,4 @@
-![logo](https://malwared.com/wp-content/uploads/2018/08/bamf_logo-01.png)
+![logo](https://malwared.com/wp-content/uploads/2018/08/bamf_logo-02.png)
 # BAMF (Backdoor Access Machine Farmer)
 [![license](https://img.shields.io/badge/license-GNU-brightgreen.svg)](https://github.com/malwaredllc/bamf/LICENSE)
 [![version](https://img.shields.io/badge/version-0.1.2-lightgrey.svg)](https://github.com/malwaredllc/bamf)
@@ -15,9 +15,11 @@ and harvest credentials via malicious redirects to fraudulent phishing sites.
 
 Currently the only vulnerability detected and exploited is [CVE-2013-6026](https://nvd.nist.gov/vuln/detail/CVE-2013-6026), commonly known as *Joel's Backdoor*,
 a severe vulnerability allowing unauthenticated access to the administration panel of many routers made by D-Link,
-one of the world's largest manufacturers of routers for home and business. However, this project is still
-under development and will soon have a more modular design, making it easier for other developers to add
-detection & exploitation features for other vulnerabilities.
+one of the world's largest manufacturers of routers for home and business. 
+
+This project is still under development and will soon have a more modular design, making it easier
+for other developers to add detection & exploitation features for other vulnerabilities.
+____________________________________________________________
 
 ## To Do
 
@@ -28,6 +30,7 @@ the Shodan IoT search engine with signatures of backdoors/vulnerabilities
 2) Change to modular design to make it easier for other developers to add detection & exploitation features for
  other vulnerabilities
 3) Integrate BAMF into the [BYOB](https://github.com/malwaredllc/byob) framework as a distribution mechanism to maximize spreading potential
+____________________________________________________________
 
 ## Contact
 
