@@ -12,6 +12,7 @@ import sys
 import socket
 import pprint
 import getopt
+import random
 import logging
 import sqlite3
 import urllib2
@@ -23,6 +24,37 @@ import shodan
 import colorama
 import mechanize
 
+LOGO = """
+
+                 :+***+:      -*#%#+:             
+                *@@@@@@@+    #@@@@@@@=            
+      .:----    @@@@@@@@*    %@@@@@@@+    :---:   
+     =@@@@@@*:  .*@@@@@%.    :@@@@@%=.  -@@@@@@%: 
+     %@@@@@@@+    .@@@@@-    -@@@@@.    #@@@@@@@# 
+     =@@@@@@@%:   =@@@@@@-  =@@@#@@-  .=@@@@@@@@- 
+      .-+%@@@@@#- *@@@@@@@+*@@@@@@@-.-%@@@@@#-:   
+         .#@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@*      
+          .@@@@@@@@@@@@@%@@@@@@@@@@@@@@@@@%.      
+           -@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@-       
+            =@@@@@@@@@@%@@%@@@@@@@@@@@@@@-        
+             #@@@@@@@@@@@@@@@@@@@@@@@@@@=         
+             .+#%%%%%%%%@%%@%%%%%%@@@@%=          
+              .+****************#*****+.          
+              #@@@@@@@@@@@@@@@@@@@@@@@@=          
+               :----------------------:           
+                                                  
+                                                  
+        #%%%%#*:   -%%%+   =%%%+  :%%%#  #%%%%%%= 
+        @@@**@@@:  #@@@@   +@@@@: *@@@@  @@@****- 
+        @@@- %@@- :@@@@@-  +@@@@*.@@@@@  @@@-     
+        @@@#%@@#. +@@*@@#  +@@@@@+@@@@@  @@@%%%=  
+        @@@++@@@- @@@:@@@: +@@*@@@@*@@@  @@@*++:  
+        @@@- #@@+=@@@@@@@+ +@@+#@@@:@@@  @@@-     
+       .@@@##@@@-#@@=.-@@@.+@@+-@@# @@@  @@@-     
+        ++++++-. +++   +++:-++- ++: +++  +++: 
+
+"""
+
 
 class Bamf(mechanize.Browser):
 
@@ -33,6 +65,13 @@ class Bamf(mechanize.Browser):
     server settings
 
     """
+
+    __tbl_config = """BEGIN TRANSACTION;
+CREATE TABLE IF NOT EXISTS tbl_config (
+    shodan_api text DEFAUL NULL
+);
+COMMIT;
+"""
 
     __tbl_routers = """BEGIN TRANSACTION;
 CREATE TABLE IF NOT EXISTS tbl_routers (
@@ -109,13 +148,12 @@ COMMIT;
 
     __vulnerability = 'CVE-2013-6027'
 
-    def __init__(self, database='database.db', api_key=None):
+    def __init__(self, shodan_api=None):
         """
         Initialize a new Bamf instance
 
         `Optional`
-        :param str database:    SQLite database
-        :param str api_key:     Shodan API key
+        :param str shodan_api:  Shodan API key
 
         """
         mechanize.Browser.__init__(self)
@@ -124,10 +162,11 @@ COMMIT;
         self._backdoors = []
         self._devices = []
         self._query = 'alphanetworks/2.23'
-        self._database = sqlite3.connect(database)
+        self._database = sqlite3.connect('database.db')
+        self._database.executescript(self.__tbl_config)
         self._database.executescript(self.__tbl_routers)
         self._database.executescript(self.__tbl_devices)
-        self._shodan = shodan.Shodan(api_key) if isinstance(api_key, str) else None
+        self._shodan = self._init_shodan(shodan_api)
         self.addheaders = [('User-Agent', 'xmlset_roodkcableoj28840ybtide')]
         self.set_handle_robots(False)
         self.set_handle_redirect(True)
@@ -136,6 +175,27 @@ COMMIT;
         self.set_handle_referer(True)
         self.set_debug_http(False)
         self.set_debug_responses(False)
+
+    def _init_shodan(self, shodan_api):
+        parameters = {"shodan_api": shodan_api}
+        n = self._database.execute("SELECT (SELECT count() from tbl_config) as count").fetchall()[0][0] 
+        if isinstance(shodan_api, str):
+            if n == 0:
+                _ = self._database.execute("INSERT INTO tbl_config (shodan_api) VALUES (:shodan_api)", parameters)
+            else:
+                _ = self._database.execute("UPDATE tbl_config SET shodan_api=:shodan_api", parameters)
+        else:
+            if n == 0:
+                warn("No Shodan API key found (register a free account at https://account.shodan.io/register)")
+            else:
+                shodan_api = self._database.execute("SELECT shodan_api FROM tbl_config").fetchall()[0][0]
+
+        self._database.commit()
+
+        try:
+            return shodan.Shodan(shodan_api)
+        except Exception as e:
+            debug("Shodan initialization error: {}".format(str(e)))
 
     def _save(self):
         for device in self._devices:
@@ -307,7 +367,7 @@ COMMIT;
 
             print('\nShodan found {} potential target hosts'.format(n))
 
-            cmd = prompt('Add hosts to targets','y','n','#').lower()
+            cmd = prompt('Add hosts to targets','y','n','#')
 
             if cmd.startswith('n'):
                 return
@@ -414,9 +474,9 @@ def enter(msg, color='CYAN'):
 def prompt(q, *args, **kwargs):
     color = kwargs.get('color') if 'color' in kwargs else 'YELLOW'
     if len(args):
-        return raw_input('\n' + colorama.Style.NORMAL + getattr(colorama.Fore, color) + "[?] " + colorama.Fore.WHITE + q + '? ' + '(' + '/'.join(args) + '): ').lower()
+        return raw_input('\n' + colorama.Style.NORMAL + getattr(colorama.Fore, color) + "[?] " + colorama.Fore.WHITE + q + '? ' + '(' + '/'.join(args) + '): ' + colorama.Style.NORMAL).lower()
     else:
-        return raw_input('\n' + colorama.Style.NORMAL + getattr(colorama.Fore, color) + "[?] " + colorama.Fore.WHITE + q + '?  ').lower()
+        return raw_input('\n' + colorama.Style.NORMAL + getattr(colorama.Fore, color) + "[?] " + colorama.Fore.WHITE + q + '?  ' + colorama.Style.NORMAL).lower()
     
 def valid_ip(address):
     try:
@@ -427,12 +487,14 @@ def valid_ip(address):
 
 # main
 def main():
-    bamf = Bamf(api_key=options.shodan)
+    bamf = Bamf(shodan_api=options.shodan)
     bamf.run()
 
 
 if __name__ == '__main__':
 
+    print(colorama.Fore.RED + LOGO + colorama.Fore.RESET)
+    
     parser = argparse.ArgumentParser(
         prog='bamf.py', 
         version='0.1.2', 
