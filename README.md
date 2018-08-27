@@ -1,4 +1,4 @@
-![logo](https://malwared.com/wp-content/uploads/2018/08/bamf_logo-03.png)
+![logo](https://malwared.com/wp-content/uploads/2018/08/bamf_logo-01.png)
 # BAMF (Backdoor Access Machine Farmer)
 [![license](https://img.shields.io/badge/license-GNU-brightgreen.svg)](https://github.com/malwaredllc/bamf/LICENSE)
 [![version](https://img.shields.io/badge/version-0.1.2-lightgrey.svg)](https://github.com/malwaredllc/bamf)
