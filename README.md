@@ -21,6 +21,26 @@ This project is still under development and will soon have a more modular design
 for other developers to add detection & exploitation features for other vulnerabilities.
 ____________________________________________________________
 
+## Installation
+
+1) Download or clone the repository (`git clone https://github.com/malwaredllc/bamf`)
+2) Install the required Python packages (`pip install -r bamf/requirements.txt`)
+3) Create a free Shodan account at https://account.shodan.io/register
+4) Configure BAMF to use your Shodan API key (`python bamf.py [--shodan API]`)
+____________________________________________________________
+
+## Usage
+
+- Use the `search` command to search the internet for potential
+- Use the `scan` command to scan the target routers for backdoors
+- Use the `map` command to map the networks of devices connected to vulnerable routers
+- Use the `pharm` command to change the DNS settings of vulnerable routers
+- Use the `targets` command to view potential targets discovered this session
+- Use the `backdoors` command to view routers with a confirmed backdoor
+- Use the `devices` command to view all devices connected to vulnerable routers
+
+____________________________________________________________
+
 ## To Do
 
 *Contributors welcome!Feel free to issue pull-requests with any new features or improvements you have come up with!*
