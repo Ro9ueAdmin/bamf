@@ -1,6 +1,6 @@
 # BAMF (Backdoor Access Machine Farmer)
-[![license](https://img.shields.io/badge/license-GNU-brightgreen)]
-[![version](https://img.shields.io/badge/version-0.1.2-lightgrey)]
+[![license](https://img.shields.io/badge/license-GNU-brightgreen.svg)]
+[![version](https://img.shields.io/badge/version-0.1.2-lightgrey.svg)]
 
 __DISCLAIMER__: This project should be used for authorized testing and educational purposes only.
 
@@ -22,5 +22,6 @@ the Shodan IoT search engine with signatures of backdoors/vulnerabilities
 
 ### Contact
 __Email__: security@malwared.com
+
 __Twitter__: [![twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=social)](https://twitter.com/malwaredllc)
 
