@@ -9,6 +9,7 @@ __github__ = 'https://github.com/malwaredllc/bamf'
 # standard library
 import os
 import sys
+import time
 import Queue
 import struct
 import socket
@@ -168,6 +169,7 @@ COMMIT;
         self._queue = Queue.Queue()
         self._query = 'alphanetworks/2.23'
         self._ports = [8000, 8080, 8888]
+        self._semaphore = threading.Semaphore(value=1)
         self._database = sqlite3.connect('database.db')
         self._database.executescript(self.__tbl_config)
         self._database.executescript(self.__tbl_routers)
@@ -190,18 +192,19 @@ COMMIT;
                 _ = self._database.execute("INSERT INTO tbl_config (shodan_api) VALUES (:shodan_api)", parameters)
             else:
                 _ = self._database.execute("UPDATE tbl_config SET shodan_api=:shodan_api", parameters)
+
+            self._database.commit()
+
+            return shodan.Shodan(shodan_api)
+
         else:
             if n == 0:
                 warn("No Shodan API key found (register a free account at https://account.shodan.io/register)")
             else:
                 shodan_api = self._database.execute("SELECT shodan_api FROM tbl_config").fetchall()[0][0]
+                if shodan_api:
+                    return shodan.Shodan(shodan_api)
 
-        self._database.commit()
-
-        try:
-            return shodan.Shodan(shodan_api)
-        except Exception as e:
-            debug("Shodan initialization error: {}".format(str(e)))
 
     def _threader(self):
         while True:
@@ -255,8 +258,11 @@ COMMIT;
 
     def _scan(self, ip, port):
         target = 'http://{}:{}'.format(ip, port)
-        debug("Requesting {}...".format(target))
+        debug("Requesting {}".format(target))
         try:
+
+            self._semaphore.acquire()
+
             conn = self.open(target, timeout=2.0)
             html = conn.get_data()
 
@@ -280,6 +286,8 @@ COMMIT;
                         print("  |      Signature: " + colorama.Style.DIM + signature + colorama.Style.NORMAL)
             else:
                 return
+
+            self._semaphore.release()
 
         except KeyboardInterrupt:
             return
@@ -407,23 +415,25 @@ COMMIT;
 
                     for ip in subnet:
                         try:
+                            time.sleep(1)
                             host = self._shodan.host(ip)
-                            if self._query in host['data']:
+                            for data in host['data']:
                                 for port in self._ports:
-                                    if port in host['ports']:
-                                        self._targets[ip] = port
+                                    if port == data['port']:
+                                        if self._query in data['http']['server']:
+                                            self._targets[ip] = port
                         except Exception as e:
                             debug(str(e))
 
                     current = len(self._targets)
-                    print('\nAdded {} hosts to targets',)
+
+                    print('\nAdded {} hosts to targets'.format(current - previous))
 
                 else:
 
                     print('\nSearching Shodan for vulnerable routers...')
 
                     for i, item in enumerate(self._shodan.search_cursor(self._query)):
-
                         ip = item.get('ip_str').encode()
                         port = item.get('port')
                         self._targets[ip] = port
@@ -446,17 +456,18 @@ COMMIT;
                                 task = (method, target)
                                 self._queue.put(task)
 
-                        self._threads = [threading.Thread(target=self._threader) for _ in range(subnet)]
+                        self._threads = [threading.Thread(target=self._threader) for _ in range(10)]
 
                         for t in self._threads:
+                            t.setDaemon(True)
                             t.start()
 
                         for t in self._threads:
-                            t.join()
+                            t.join(timeout=1.0)
 
                         current = len(self._targets)
 
-                        print('\nAdded {} new targets\n'.format(current))
+                        print('\nAdded {} new targets\n'.format(current - previous))
 
                     else:
                         error('invalid IP address/range')
@@ -505,6 +516,19 @@ COMMIT;
         pprint.pprint(self._devices)
         print(colorama.Fore.CYAN + '\n[+] ' + colorama.Style.BRIGHT + colorama.Fore.RESET + str(len(self._devices)) + colorama.Style.NORMAL + ' devices connected to vulnerable routers\n')
 
+    def eval(self, code):
+        """
+        eval() code directly in the current context (for debugging purposes)
+
+        `Required`
+        :param str code:    Python code
+
+        """
+        try:
+            print eval(code)
+        except Exception as e:
+            debug(str(e))
+
     def quit(self, *args):
         """
         End the session and exit BAMF
@@ -525,14 +549,21 @@ COMMIT;
 
         """
         while True:
+
             try:
+
                 cmd, _, arg = raw_input(colorama.Style.BRIGHT + "[bamf]> " + colorama.Style.NORMAL).partition(' ')
+
                 if hasattr(self, cmd):
                     getattr(self, cmd)(arg) if len(arg) else getattr(self, cmd)()
                 else:
                     debug("unknown command: '{}' (use 'help' for usage information)".format(cmd))
+
             except KeyboardInterrupt:
                 sys.exit(0)
+            except Exception as e:
+                debug(str(e))
+
             self.run()
 
 # utilities
